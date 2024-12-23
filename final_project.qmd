@@ -6,7 +6,6 @@ format:
         theme: yeti   
 ---
 
-
 ```{python}
 import pandas as pd
 import plotly.express as px
@@ -120,9 +119,7 @@ employ_child_fert = employ_child_fert.drop(columns="country_y").rename(
     columns={"country_x": "country"}
 )
 
-
 ```
-
 
 ```{python}
 # Define a color mapping for consistency
@@ -161,7 +158,7 @@ fig = px.bar(
         "continent": "Continent",
         "country": "Country",
     },
-    color_discrete_map=color_map,
+#    color_discrete_map=continent_color,
 ).update_layout(showlegend=False)
 
 # Create the map using plotly express with a red color scale
@@ -368,29 +365,31 @@ lowest20 = (
 
 ## Row 1 {height=30%}
 
+::: {.row}
+
+::: {.col width=33%}
 ::: {.valuebox icon="heart" color="#1E90FF" title="Lowest Child Mortality"}
-
 `{python} str(lowest_mortality_value)`
-
 `{python} lowest_mortality_country` in `{python} str(lowest_mortality_year)`
-
+:::
 :::
 
-::: {.valuebox icon="flower3" color="#87CEFA" title="Highest Total Fertility Rate"} 
-
+::: {.col width=33%}
+::: {.valuebox icon="flower3" color="#87CEFA" title="Highest Total Fertility Rate"}
 `{python} str(highest_fertility_value)`
-
 `{python} highest_fertility_country` in `{python} str(highest_fertility_year)`
-
+:::
 :::
 
+::: {.col width=33%}
 ::: {.valuebox icon="mortarboard-fill" color="#4682B4" title="Highest Female Employment Rate"}
-
 `{python} str(highest_employ_rat_value)`
-
 `{python} highest_employ_rat_country` in `{python} str(highest_employ_rat_year)`
+:::
+:::
 
 :::
+
 
 ## Row 2 {height=60%}
 
@@ -418,7 +417,6 @@ fig_fert
 Markdown(table_df.to_markdown())
 # This table can be filtered alphabetically by country or sorted in ascending/descending order by any other column.
 ```
-
 
 ### Column {.tabset width="40%"}
 
@@ -453,7 +451,6 @@ fig_fert1
 ### Row
 
 There is a clear divide between continents with higher fertility rates (Africa and Oceania) and those with lower rates (Europe, America, and parts of Asia). The data reflects varying levels of development, healthcare access, education, and cultural norms influencing fertility rates worldwide.
-
 
 ## Column 2 
 
@@ -552,7 +549,6 @@ Africa exhibits the widest range of female employment rates, reflecting signific
 
 Asia also shows a broad range, with some countries having very low employment rates and others quite high. On the other hand, Europe, America, and Oceania demonstrate relatively smaller ranges, indicating more consistency within these continents. Furthermore, Europe and America have lower medians compared to Africa and Oceania, reflecting a slightly lower overall female employment rate.
 
-
 # Data Download
 
 ```{python}
@@ -564,7 +560,6 @@ show(
 )
 ```
 
-
 # About
 
 The data used for this PBB's capstone project was obtained from [Gapminder's data repository](https://gapminder.org/data). Three indicators were selected for analysis namely; "child mortality", "total fertilty rate", and "female employment rate".
@@ -574,7 +569,6 @@ Child mortality is for 0 to 5 year olds dying per 1000 born.
 Female employment rate the percentage of female population, age group 15+, that has been employed during the given year.
 
 Gapminder is an independent Swedish foundation with no political, religious or economic affiliations. Gapminder fights devastating misconceptions and promotes a fact-based worldview everyone can understand.
-
 
 **Watch Hans Rosling on Child Mortality in Developing Countries:**
 
