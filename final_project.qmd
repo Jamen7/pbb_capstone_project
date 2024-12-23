@@ -3,7 +3,12 @@ title: "Gapminder | Child Mortality & Fertility Rate"
 author: "James Matosse"
 format: 
     dashboard:
-        theme: yeti   
+        theme: yeti
+        echo: false
+        include: true
+        fig.align: center
+        layout:
+            fill: true
 ---
 
 ```{python}
@@ -158,8 +163,9 @@ fig = px.bar(
         "continent": "Continent",
         "country": "Country",
     },
-#    color_discrete_map=continent_color,
+    #    color_discrete_map=continent_color,
 ).update_layout(showlegend=False)
+include: False
 
 # Create the map using plotly express with a red color scale
 map_fig = px.choropleth(
@@ -176,6 +182,7 @@ map_fig = px.choropleth(
     },
     color_continuous_scale="Reds",
 ).update_layout(coloraxis_showscale=True)
+include: False
 
 fig_fert = px.scatter(
     child_fertility.query(
@@ -196,6 +203,7 @@ fig_fert = px.scatter(
 ).update_layout(
     showlegend=False, xaxis_title="Year", yaxis_title="Total Fertility Rate"
 )
+include: False
 
 highest_fertility = child_fertility.loc[
     child_fertility.groupby("continent")["woman_fertility"].idxmax()
@@ -260,6 +268,7 @@ fig2.update_layout(
     ),
     legend_title="Country",
 )
+include: False
 
 filter_year = employ_child_fert.query("year == 2019")
 highest_employ = (
@@ -296,6 +305,7 @@ map_fig2 = px.choropleth(
     },
     color_continuous_scale="Greens",
 ).update_layout(coloraxis_showscale=True)
+include: False
 
 avg_fert_cont = (
     employ_child_fert.groupby("continent")
@@ -316,6 +326,7 @@ fig_fert1 = px.pie(
 ).update_traces(
     textinfo="label+percent", showlegend=False  # Show label and percent
 )
+include: False
 
 # Compute highest employment rate
 highestE_row = (
@@ -363,35 +374,33 @@ lowest20 = (
 
 # HOME
 
-## Row 1 {height=30%}
+## Row 1 {height=35%}
 
-::: {.row}
-
-::: {.col width=33%}
 ::: {.valuebox icon="heart" color="#1E90FF" title="Lowest Child Mortality"}
+
 `{python} str(lowest_mortality_value)`
+
 `{python} lowest_mortality_country` in `{python} str(lowest_mortality_year)`
-:::
+
 :::
 
-::: {.col width=33%}
-::: {.valuebox icon="flower3" color="#87CEFA" title="Highest Total Fertility Rate"}
+::: {.valuebox icon="flower3" color="#87CEFA" title="Highest Total Fertility Rate"} 
+
 `{python} str(highest_fertility_value)`
+
 `{python} highest_fertility_country` in `{python} str(highest_fertility_year)`
-:::
+
 :::
 
-::: {.col width=33%}
 ::: {.valuebox icon="mortarboard-fill" color="#4682B4" title="Highest Female Employment Rate"}
+
 `{python} str(highest_employ_rat_value)`
+
 `{python} highest_employ_rat_country` in `{python} str(highest_employ_rat_year)`
-:::
-:::
 
 :::
 
-
-## Row 2 {height=60%}
+## Row 2 {height=55%}
 
 ### {width=50%}
 
