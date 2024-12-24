@@ -167,14 +167,15 @@ fig_fe = px.scatter(
     color="continent",
     title="The Woman's fertility vs. Child Mortality",
     size="employment_rate",
+    hover_name="country",
     color_discrete_map=continent_color,
     labels={
         "country": "Country",
         "woman_fertility": "Woman's Fertility",
         "year": "Year",
-        "mortality_pct": "Child Mortality (%)",
+        "mortality_pct": "Child Mortality",
         "continent": "Continent",
-        "employment_rate": "Employment Rate"
+        "employment_rate": "Employment Rate",
     },
 ).update_layout(
     showlegend=False,
@@ -228,7 +229,7 @@ fig_fert = px.line(
         "country": "Country",
         "woman_fertility": "Woman's Fertility",
         "year": "Year",
-#        "mortality": "Child Mortality",
+        #        "mortality": "Child Mortality",
     },
 ).update_layout(
     showlegend=False, xaxis_title="Year", yaxis_title="Total Fertility Rate"
@@ -290,22 +291,26 @@ fig_fert1 = px.pie(
     textinfo="label+percent", showlegend=False  # Show label and percent
 )
 
+
 def assign_employ_group(employ_rate):
     if employ_rate >= 3 and employ_rate < 36:
         return "3-35"
     elif employ_rate >= 36 and employ_rate < 47:
-        return '36-46'
+        return "36-46"
     elif employ_rate >= 47 and employ_rate < 58:
         return "47-58"
     elif employ_rate >= 58:
-        return '58-90'
+        return "58-90"
     else:
-        return 'Invalid'
+        return "Invalid"
 
-#assign_employ_group(20)
+
+# assign_employ_group(20)
 assign_employ_groupVec = np.vectorize(assign_employ_group)
 
-employ_child_fert["employ_group"] = assign_employ_groupVec(employ_child_fert["employment_rate"])
+employ_child_fert["employ_group"] = assign_employ_groupVec(
+    employ_child_fert["employment_rate"]
+)
 
 
 # Use pd.cut() to group
@@ -316,12 +321,15 @@ employ_child_fert["employ_group"] = assign_employ_groupVec(employ_child_fert["em
 
 
 # Tabulate age groups
-#employ_child_fert["employ_group"].value_counts(normalize=True)
+# employ_child_fert["employ_group"].value_counts(normalize=True)
 
 # Create summary table for employ groups
 employ_mortality_table = (
     employ_child_fert.groupby("employ_group")
-    .agg(mean_mortality_employ=("mortality_pct", "mean"), num_inds=("mortality_pct", "size"))
+    .agg(
+        mean_mortality_employ=("mortality_pct", "mean"),
+        num_inds=("mortality_pct", "size"),
+    )
     .reset_index()
 )
 
@@ -336,8 +344,11 @@ figl = px.bar(
         "employ_group": "Employment Rate Group",
     },
     #    color_discrete_map=continent_color,
-).update_layout(showlegend=False,
- xaxis_title="Female Employment Rate Group (%)", yaxis_title="Child Mortality (%)")
+).update_layout(
+    showlegend=False,
+    xaxis_title="Female Employment Rate Group (%)",
+    yaxis_title="Child Mortality (%)",
+)
 
 # Compute highest employment rate
 highestE_row = (
@@ -566,7 +577,7 @@ employ_child_fert = employ_child_fert.rename(
         "employment_rate": "Employment Rate",
     }
 )
-employ_child_fert = employ_child_fert.drop(columns='mortality_pct')
+employ_child_fert = employ_child_fert.drop(columns=['mortality_pct', 'employ_group'])
 # Display full dataset with itables
 show(
     employ_child_fert,
