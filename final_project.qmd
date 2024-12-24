@@ -564,7 +564,7 @@ Asia also shows a broad range, with some countries having very low employment ra
 # Data Download
 
 ```{python}
-# | title: Child mortality, total fertility and employment rate Dataset (1991 to 2019)
+# | title: Child mortality, total fertility and employment rate dataset (1991 to 2019)
 
 employ_child_fert = employ_child_fert.rename(
     columns={

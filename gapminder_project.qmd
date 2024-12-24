@@ -572,6 +572,137 @@ lowest_mortality_country = loweest_row["country"]
 lowest_mortality_value = round(lowest_row["mortality"], 1)
 ```
 
+```{python}
+import ipywidgets as widgets
+from IPython.display import display
+import plotly.express as px
+
+# Dropdown widget
+countries = child_fertility['country'] #["China", "Egypt", "Australia", "Argentina", "Germany"]
+country_selector = widgets.SelectMultiple(
+    options=countries,
+    value=["China", "Egypt"],
+    description="Countries",
+    disabled=False,
+)
+
+# Function to update the plot
+def update_plot(selected_countries):
+    filtered_df = child_fertility.query("country in @selected_countries")
+    fig = px.scatter(
+        filtered_df,
+        x="year",
+        y="woman_fertility",
+        color="country",
+        title="The Woman's fertility from 1991 to 2019",
+        size="mortality",
+#        color_discrete_map=color_map,
+        labels={
+            "country": "Country",
+            "woman_fertility": "Woman's Fertility",
+            "year": "Year",
+            "mortality": "Child Mortality",
+        },
+    ).update_layout(
+        showlegend=True, xaxis_title="Year", yaxis_title="Total Fertility Rate"
+    )
+    fig.show()
+
+# Observe dropdown selection
+widgets.interactive(update_plot, selected_countries=country_selector)
+display(country_selector)
+
+```
+
+```{python}
+from dash import Dash, dcc, html, Input, Output, callback
+import plotly.express as px
+
+# Initialize Dash app
+app = Dash(__name__, use_pages=True)
+
+# Define the layout for the home page
+home_layout = html.Div([
+    html.H1("Welcome to the Dashboard"),
+    html.P("Navigate to different pages using the links below."),
+    dcc.Link("Go to Fertility Plot", href="/fertility"),
+    html.Br(),
+    dcc.Link("Go to Mortality Plot", href="/mortality"),
+])
+
+# Define the layout for the fertility page
+fertility_layout = html.Div([
+    html.H1("Fertility Plot"),
+    dcc.Link("Go back to Home", href="/"),
+    dcc.Graph(id="fertility-plot"),
+])
+
+# Define the layout for the mortality page
+mortality_layout = html.Div([
+    html.H1("Mortality Plot"),
+    dcc.Link("Go back to Home", href="/"),
+    dcc.Graph(id="mortality-plot"),
+])
+
+# Route pages
+app.layout = html.Div([
+    dcc.Location(id="url"),
+    html.Div(id="page-content"),
+])
+
+@app.callback(
+    Output("page-content", "children"),
+    Input("url", "pathname")
+)
+def display_page(pathname):
+    if pathname == "/fertility":
+        return fertility_layout
+    elif pathname == "/mortality":
+        return mortality_layout
+    else:
+        return home_layout
+
+# Add interactivity for plots
+@app.callback(
+    Output("fertility-plot", "figure"),
+    Input("url", "pathname")
+)
+def update_fertility_plot(pathname):
+    if pathname == "/fertility":
+        fig = px.scatter(
+            child_fertility.query("country in ['China', 'Egypt', 'Australia', 'Argentina', 'Germany']"),
+            x="year",
+            y="woman_fertility",
+            color="country",
+            size="mortality",
+            title="Fertility Over Time",
+        )
+        return fig
+    return {}
+
+@app.callback(
+    Output("mortality-plot", "figure"),
+    Input("url", "pathname")
+)
+def update_mortality_plot(pathname):
+    if pathname == "/mortality":
+        fig = px.scatter(
+            child_fertility.query("country in ['China', 'Egypt', 'Australia', 'Argentina', 'Germany']"),
+            x="year",
+            y="mortality",
+            color="country",
+            size="woman_fertility",
+            title="Mortality Over Time",
+        )
+        return fig
+    return {}
+
+# Run app
+if __name__ == "__main__":
+    app.run_server(debug=True)
+
+```
+
 # Final Tabset
 
 Below, we place our results into a tabbed interface.
@@ -642,3 +773,72 @@ fig3.show()
 ```
 
 :::
+
+```{python}
+# Suppress rendering
+#include: False
+
+
+# This code causes issues with unintended rendering of the figure to the dashborad, switch to plotly.express
+# Filter the data
+# filtered_data = employ_child_fert.query(
+#     'country == ["China", "Egypt", "Australia", "Argentina", "Germany"]'
+# )
+
+# Create the figure
+# fig2 = go.Figure()
+# # include: False
+
+# # Add scatter plot for 'employment_rate' vs. 'year' (y-axis 1)
+# for country in filtered_data["country"].unique():
+#     country_data = filtered_data[filtered_data["country"] == country]
+#     fig2.add_trace(
+#         go.Scatter(
+#             x=country_data["year"],
+#             y=country_data["employment_rate"],
+#             mode="markers",
+#             name=f"{country} (Employment)",
+#             legendgroup=country,
+#             showlegend=False,
+#             marker=dict(color=color_map[country]),  # Assign color
+#         )
+#     )
+
+# ##include: False
+# # Add a secondary y-axis for 'woman_fertility' (y-axis 2)
+# for country in filtered_data["country"].unique():
+#     country_data = filtered_data[filtered_data["country"] == country]
+#     fig2.add_trace(
+#         go.Scatter(
+#             x=country_data["year"],
+#             y=country_data["woman_fertility"],
+#             mode="lines",
+#             name=f"{country} (Woman's Fertility)",
+#             yaxis="y2",
+#             showlegend=False,  # Avoid duplicate legends
+#             line=dict(color=color_map[country]),  # Assign matching color
+#         )
+#     )
+
+# # include: False
+# # Update layout to include a second y-axis
+# fig2.update_layout(
+#     title="The Woman's Fertility and Employment Rate from 1991 to 2019",
+#     xaxis=dict(title="Year"),
+#     yaxis=dict(title="Female Employment Rate", side="left"),
+#     yaxis2=dict(
+#         title="Total Fertility Rate", overlaying="y", side="right", showgrid=False
+#     ),
+#     legend=dict(
+#         orientation="h",  # Horizontal orientation
+#         yanchor="top",  # Anchor at the top of the legend box
+#         y=-0.2,  # Position it below the plot (adjust as needed)
+#         xanchor="center",  # Center align the legend
+#         x=0.5,  # Place at the center of the plot horizontally
+#     ),
+#     legend_title="Country",
+# )
+# include: False
+
+
+```
