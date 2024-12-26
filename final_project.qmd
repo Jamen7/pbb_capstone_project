@@ -589,9 +589,9 @@ show(
 
 The data used for this PBB's capstone project was obtained from [Gapminder's data repository](https://gapminder.org/data). Three indicators were selected for analysis namely; "child mortality", "total fertilty rate", and "female employment rate".
 
-Total fertility rate is the number of children that would be born to a woman if she were to live to the end of her childbearing years and bear children in accordance with age-specific fertility rates of the specified year.
 Child mortality is for 0 to 5 year olds dying per 1000 born.
-Female employment rate the percentage of female population, age group 15+, that has been employed during the given year.
+Total fertility rate is the number of children that would be born to a woman if she were to live to the end of her childbearing years and bear children in accordance with age-specific fertility rates of the specified year.
+Female employment rate is the percentage of female population, age group 15+, that has been employed during the given year.
 
 Gapminder is an independent Swedish foundation with no political, religious or economic affiliations. Gapminder fights devastating misconceptions and promotes a fact-based worldview everyone can understand.
 

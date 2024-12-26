@@ -8,7 +8,10 @@ author: "James Matosse"
 
 ## Datasets
 
-Three datasets were downloaded from the Gapminder; "child mortality", "woman fertilty", "females employment rate"
+Three datasets were downloaded from the Gapminder; "child mortality", "woman fertilty", "females employment rate".
+Child mortality is for 0 to 5 year olds dying per 1000 born.
+Total fertility rate is the number of children that would be born to a woman if she were to live to the end of her childbearing years and bear children in accordance with age-specific fertility rates of the specified year.
+Female employment rate the percentage of female population, age group 15+, that has been employed during the given year.
 
 ### Imports
 
@@ -20,11 +23,15 @@ from itables import show
 import country_converter as coco
 ```
 
+Reading all three datasets from the data folder into a pandas dataframes.
 
 ```{python}
 child_mortality = pd.read_csv("data/child_mortality_0_5_year_olds_dying_per_1000_born.csv")
-child_mortality
+fertility_wide = pd.read_csv("data/children_per_woman_total_fertility.csv")
+employ_wide = pd.read_csv("data/females_aged_15plus_employment_rate_percent.csv")
 ```
+
+First we calculate the relative change for Child Mortality between 1999 and 2019
 
 ```{python}
 # Subset the data to include `country`, `1999`, and `2019` columns only.
@@ -34,60 +41,113 @@ table_df = table_df.rename(columns={'country': 'Country/area'})
 # Calculate absolute change as the difference between 2019 and 1999
 table_df["Absolute Change"] = table_df['2019'] - table_df['1999']
 
-# Calculate relative change as the absolute change divided by the 2000 emissions, then multiplied by 100
+# Calculate relative change as the absolute change divided by the 2019 child mortality, then multiplied by 100
 table_df["Relative Change"] = ((table_df['2019'] - table_df['1999']) / table_df['1999']) * 100
 
 # Round to 0 decimal places, and add a % sign to the relative change
 table_df["Relative Change"] = table_df["Relative Change"].round(0).astype(str) + "%"
 ```
 
-The imported dataset is in a wide format, for data analysis it will be converted to a long format with only three columns; "country", "year" and "mortality".
-Child mortality is for 0 to 5 year olds dying per 1000 born.
+## Data cleaning
 
+The datasets are all in a wide format, for further data analysis it will be converted to a long format with only three columns each; "country", "year" and "value_name".
 
 ```{python}
+# Use pd.melt()
 child_mortality_long = child_mortality.melt(
     id_vars="country", var_name="year", value_name="mortality"
 )
-child_mortality_long
+fertility_long = fertility_wide.melt(
+    id_vars="country", var_name="year", value_name="woman_fertility"
+)
+employ_long = employ_wide.melt(
+    id_vars="country", var_name="year", value_name="employment_rate"
+)
 ```
 
-The data has observations from the year 1800 to current and projections to year 2100. The analysis will focus on 1991 to 2019 data.
+The `child_mortality_long` and `fertility_long` datasets have observations from the year 1800 to current and projections to year 2100. The analysis will focus on 1991 to 2019 corresponding with the `employ_long` dataset. The coco library will have difficulty converting the country UAE to a country code according to ISO3, likewise the Channel Islands country will not be recognised. Therefore, these country names will be replaced by their alternatives.
 
 ```{python}
+# Replace "UAE" with "United Arab Emirates"
 child_mortality_long["country"] = child_mortality_long["country"].replace(
     {"UAE": "United Arab Emirates"}
 )
-
-# Convert 'country' to a 'country code' and add it as a new variable
-child_mortality_long["country_code"] = coco.convert(
-    child_mortality_long["country"], to="ISO3"
+fertility_long["country"] = fertility_long["country"].replace(
+    {"UAE": "United Arab Emirates"}
 )
+employ_long["country"] = employ_long["country"].replace({"UAE": "United Arab Emirates"})
+# Replace "Channel Islands" with "United Kingdom"
+employ_long["country"] = employ_long["country"].replace(
+    "Channel Islands", "United Kingdom"
+)
+
+# Merge child_mortality_long with fertility_long on both country and year
+child_fertility = pd.merge(
+    child_mortality_long,
+    fertility_long,
+    on=["country", "year"],
+    how="left",
+)
+# Before quering the year variable, set the "year" to an integer
+child_fertility["year"] = child_fertility["year"].astype(int)
+
+# Subset the recently merged data to between 1991 and 2019
+child_fertility_sub = child_fertility.query("year >= 1991 and year <= 2019")
+
+# set the "year" to an integer
+employ_long["year"] = employ_long["year"].astype(int)
+```
+
+To include the `employ_long` to the `child_fertility_sub`, both datasets need a uniform country code to ensure consistency.
+
+```{python}
+# Convert 'country' to a 'country code' and add it as a new variable
+child_fertility_sub["country_code"] = coco.convert(
+    child_fertility_sub["country"], to="ISO3"
+)
+employ_long["country_code"] = coco.convert(employ_long["country"], to="ISO3")
 ```
 
 ```{python}
-child_mortality_long['year'] = child_mortality_long['year'].astype(int)
-
-child_subset = child_mortality_long.query('year >= 1991 and year <= 2019')
-
+employ_child_fert = pd.merge(
+    child_fertility_sub,
+    employ_long,
+    on=["country_code", "year"],
+    how="left",
+)
+employ_child_fert = employ_child_fert.drop(columns="country_y").rename(
+    columns={"country_x": "country"}
+)
 ```
 
 ```{python}
 # Creates continent variable to the assigned country
-child_subset["continent"] = child_subset["country"].apply(
+employ_child_fert["continent"] = employ_child_fert["country"].apply(
     lambda x: coco.convert(names=x, to="continent")
 )
 ```
 
+Re-ordering of the columns' variables
+
 ```{python}
-child_subset
+col_list = list(employ_child_fert.columns)
+
+col_list.insert(
+    1, col_list.pop(4)
+)  # Pop the 5th column (index 4) and insert at the 2nd
+# col_list
+col_list.insert(
+    2, col_list.pop(6)
+)  # Pop the 7th column (index 6) and insert at the 3rd
+employ_child_fert = employ_child_fert[col_list]
 ```
+
 
 Plotting selected countries' child mortality
 
 ```{python}
 px.line(
-    child_subset.query('country == ["China", "Egypt", "Australia", "Argentina"]'),
+    employ_child_fert.query('country == ["China", "Egypt", "Australia", "Argentina"]'),
     x="year",
     y="mortality",
     color="country",
@@ -97,7 +157,6 @@ px.line(
 
 The time series show that Egypt has the highest child mortality that was 81.5 in 1991 and drop to 20.5 in 2019 while Australia is the lowest, ranging from 8.66 to 5.59, respectively.
 
-The **continent** variable can now be used for groupings.
 
 ```{python}
 highest_mortality = child_subset.loc[
