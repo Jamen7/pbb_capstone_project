@@ -222,14 +222,13 @@ fig_fert = px.line(
     x="year",
     y="woman_fertility",
     color="country",
-    title="The Woman's fertility from 1991 to 2019",
+    title="The Woman's Fertility from 1991 to 2019",
     markers=True,
     color_discrete_map=color_map,
     labels={
         "country": "Country",
         "woman_fertility": "Woman's Fertility",
         "year": "Year",
-        #        "mortality": "Child Mortality",
     },
 ).update_layout(
     showlegend=False, xaxis_title="Year", yaxis_title="Total Fertility Rate"
@@ -269,7 +268,7 @@ map_fig2 = px.choropleth(
     },
     color_continuous_scale="Greens",
 ).update_layout(coloraxis_showscale=True)
-# include: False
+
 
 avg_fert_cont = (
     employ_child_fert.groupby("continent")
@@ -383,7 +382,7 @@ lowest20 = (
 ```
 
 
-# HOME
+# Home Page
 
 ## Row 1 {height=35%}
 
@@ -405,7 +404,7 @@ lowest20 = (
 
 ::: {.valuebox icon="mortarboard-fill" color="#4682B4" title="Highest Female Employment Rate"}
 
-`{python} str(highest_employ_rat_value)`
+`{python} str(highest_employ_rat_value + %)`
 
 `{python} highest_employ_rat_country` in `{python} str(highest_employ_rat_year)`
 
