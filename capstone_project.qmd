@@ -1,0 +1,725 @@
+---
+title: "Analyzing Global Trends in Child Mortality, Fertility, and Employment"
+format: html
+author: "James Matosse"
+---
+
+# Introduction
+
+## Datasets
+
+This project analyzes three datasets downloaded from Gapminder: *Child Mortality*, *Women's Fertility*, and *Female Employment Rate*.  
+- *Child Mortality* measures the number of deaths of children under five years old per 1,000 live births.  
+- *Women's Fertility* captures the total number of children a woman is expected to have if she lives through her childbearing years, based on age-specific fertility rates.  
+- *Female Employment Rate* reflects the percentage of women aged 15 and older who are employed in a given year.
+
+The goal of this project is to explore and visualize trends across these datasets using Quarto.
+
+### Imports
+
+```{python}
+import pandas as pd
+import plotly.express as px
+import numpy as np
+from itables import show
+import country_converter as coco
+
+import warnings
+# Suppress warnings for cleaner output
+warnings.filterwarnings("ignore")
+```
+
+### Loading Data
+
+The datasets are read into pandas dataframes:
+
+```{python}
+child_mortality = pd.read_csv("data/child_mortality_0_5_year_olds_dying_per_1000_born.csv")
+fertility_wide = pd.read_csv("data/children_per_woman_total_fertility.csv")
+employ_wide = pd.read_csv("data/females_aged_15plus_employment_rate_percent.csv")
+```
+
+## Data Cleaning
+
+The datasets are provided in wide format, with years as column headers. To facilitate analysis, we reshape them into long format with columns for "country," "year," and the respective metric value:
+
+```{python}
+def melt_data(df, value_name):
+    return df.melt(id_vars="country", var_name="year", value_name=value_name)
+
+child_mortality_long = melt_data(child_mortality, "mortality")
+fertility_long = melt_data(fertility_wide, "woman_fertility")
+employ_long = melt_data(employ_wide, "employment_rate")
+```
+
+Certain country names need correction to ensure consistent mapping:
+
+```{python}
+replacements = {"UAE": "United Arab Emirates", "Channel Islands": "United Kingdom"}
+for df in [child_mortality_long, fertility_long, employ_long]:
+    df["country"] = df["country"].replace(replacements)
+    df["year"] = df["year"].astype(int)
+```
+
+Finally, we merge datasets and filter the data to focus on the years 1991 to 2019:
+
+```{python}
+# Merge datasets
+child_fertility = pd.merge(
+    child_mortality_long, fertility_long, on=["country", "year"], how="left"
+)
+
+# Filter for analysis years
+filtered_child_fertility = child_fertility.query("1991 <= year <= 2019")
+```
+
+
+To include employ_long with filtered_child_fertility, we standardize country names using ISO3 country codes. These codes will also serve as location identifiers for creating a choropleth map of the world.
+
+```{python}
+# Convert 'country' to ISO3 country codes
+filtered_child_fertility["country_code"] = coco.convert(
+    names=filtered_child_fertility["country"], to="ISO3"
+)
+employ_long["country_code"] = coco.convert(
+    names=employ_long["country"], to="ISO3"
+)
+```
+
+**Merging Data**
+
+We merge filtered_child_fertility and employ_long on country_code and year to create a unified dataset. After merging, we clean up column names and drop redundant fields.
+
+```{python}
+# Merge datasets on 'country_code' and 'year'
+employ_child_fert = pd.merge(
+    filtered_child_fertility,
+    employ_long,
+    on=["country_code", "year"],
+    how="left",
+)
+
+# Drop duplicate 'country_y' column and rename 'country_x' to 'country'
+employ_child_fert = employ_child_fert.drop(columns="country_y").rename(
+    columns={"country_x": "country"}
+)
+```
+
+**Adding Continent Information**
+
+We add a continent variable to categorize countries by region using the country_converter library.
+
+```{python}
+# Assign continents based on country names
+employ_child_fert["continent"] = employ_child_fert["country"].apply(
+    lambda x: coco.convert(names=x, to="continent")
+)
+```
+
+**Reordering Columns and Cleaning Data**
+
+To improve dataset readability, columns are reordered, and rows with missing values (e.g., for employment rate) are removed.
+
+```{python}
+# Reorder columns for logical grouping
+col_list = list(employ_child_fert.columns)
+col_list.insert(1, col_list.pop(4))  # Move 'country_code' to 2nd position
+col_list.insert(2, col_list.pop(6))  # Move 'continent' to 3rd position
+employ_child_fert = employ_child_fert[col_list]
+
+# Remove rows with missing values
+employ_child_fert = employ_child_fert.dropna()
+```
+
+# Data Manipulation and Visualization
+
+## Child Mortality Analysis (1991–2019)
+
+To analyze the trends in child mortality, we calculate the absolute and relative changes between 1999 and 2019.
+
+```{python}
+# Select relevant columns for analysis
+table_df = child_mortality[["country", "1999", "2019"]].rename(
+    columns={"country": "Country/area"}
+)
+
+# Calculate absolute change
+table_df["Absolute Change"] = table_df["2019"] - table_df["1999"]
+
+# Calculate relative change as a percentage
+table_df["Relative Change"] = ((table_df["2019"] - table_df["1999"]) / table_df["1999"]) * 100
+
+# Round and format relative change
+table_df["Relative Change"] = table_df["Relative Change"].round(0).astype(int).astype(str) + "%"
+
+show(table_df)
+# This table can be filtered alphabetically by country or sorted in ascending/descending order by any other column.
+```
+
+Observation:
+Most countries experienced a significant reduction in child mortality between 1991 and 2019. However, Seychelles, Dominica, and Brunei were exceptions, showing an increase during this period.
+
+### Time Series: Selected Countries' Child Mortality
+
+We visualize the trends in child mortality for selected countries across continents to highlight intercontinental disparities.
+
+```{python}
+# Define a consistent color mapping for continents and countries
+country_color_map = {
+    "China": "#d62728",
+    "Egypt": "#1f77b4",
+    "Australia": "#2ca02c",
+    "Argentina": "#ff7f0e",
+    "Germany": "#9467bd",
+}
+
+continent_color = {
+    "Africa": "#1f77b4",
+    "America": "#ff7f0e",
+    "Oceania": "#2ca02c",
+    "Asia": "#d62728",
+    "Europe": "#9467bd",
+}
+
+# Convert mortality rate to percentage for consistency in scaling (if required elsewhere)
+employ_child_fert["mortality_pct"] = employ_child_fert["mortality"] / 10
+
+# Plot time series for selected countries
+fig_line = px.line(
+    employ_child_fert.query(
+        'country in ["China", "Egypt", "Australia", "Argentina", "Germany"]'
+    ),
+    x="year",
+    y="mortality",
+    color="country",
+    color_discrete_map=country_color_map,
+    title="Child Mortality Trends (1991–2019)",
+    labels={
+        "mortality": "Child Mortality",
+        "year": "Year",
+        "country": "Country",
+    },
+)
+fig_line.show()
+```
+
+Insight:
+Egypt displayed the highest child mortality rate among the selected countries, starting at 81.5 in 1991 and decreasing significantly to 20.5 by 2019. In contrast, Australia and Germany maintained consistently low mortality rates, remaining below 10 throughout the study period.
+
+### Lowest Mortality Rates by Continent
+
+We summarize the countries with the lowest child mortality rates for each continent in 2019.
+
+```{python}
+# Find the country with the lowest mortality per continent
+lowest_mortality = employ_child_fert.loc[
+    employ_child_fert.groupby("continent")["mortality"].idxmin()
+].sort_values("mortality")
+
+# Bar chart for lowest child mortality by continent
+fig_bar = px.bar(
+    lowest_mortality,
+    x="continent",
+    y="mortality",
+    color="country",
+    title="Lowest Child Mortality per Continent (2019)",
+    labels={
+        "mortality": "Child Mortality",
+        "continent": "Continent",
+        "country": "Country",
+    },
+    text_auto=".1f",
+)
+fig_bar.show()
+```
+
+Observation:
+The disparities between continents in child mortality are striking. Developed regions such as Europe, Oceania, and Asia exhibit much lower rates compared to developing regions like Africa and America.
+
+- Finland has the lowest child mortality rate globally, reflecting its robust healthcare infrastructure and child welfare practices.
+- Libya, with the highest rate among the continents listed, highlights challenges related to healthcare access and economic instability in the African region.
+
+### Choropleth Map: Global Child Mortality
+
+We visualize the global distribution of child mortality rates over time using an animated choropleth map.
+
+```{python}
+# Animated map of child mortality
+map_fig = px.choropleth(
+    employ_child_fert,
+    locations="country_code",
+    color="mortality",
+    hover_name="country",
+    animation_frame="year",
+    title="Global Child Mortality (1991–2019)",
+    color_continuous_scale="Reds",
+    labels={
+        "country_code": "Country Code",
+        "mortality": "Child Mortality",
+        "year": "Year",
+    },
+)
+
+# Add scale visibility
+map_fig.update_layout(coloraxis_showscale=True)
+map_fig.show()
+```
+
+Insights:
+The map provides a powerful visual representation of regional disparities in child mortality. It also illustrates progress in reducing mortality rates globally, with significant improvements observed in many regions by 2019.
+
+
+## Women's Fertility: Global Trends and Regional Insights
+
+Definition:
+The Total Fertility Rate (TFR) is the average number of children a woman would have if she were to live through her childbearing years, assuming age-specific fertility rates remain constant over time.
+
+### Fertility Trends for Selected Countries
+
+```{python}
+fig_fert = px.line(
+    employ_child_fert.query(
+        'country in ["China", "Egypt", "Australia", "Argentina", "Germany"]'
+    ),
+    x="year",
+    y="woman_fertility",
+    color="country",
+    title="Women's Fertility Trends (1991–2019)",
+    markers=True,
+    color_discrete_map=country_color_map,
+    labels={
+        "country": "Country",
+        "woman_fertility": "Total Fertility Rate (TFR)",
+        "year": "Year",
+    },
+).update_layout(
+    showlegend=True,
+    xaxis_title="Year",
+    yaxis_title="Total Fertility Rate",
+)
+fig_fert.show()
+```
+
+Insights:
+
+- China, Germany, and Australia consistently recorded TFRs below 2.0, except for a brief anomaly in Australia in 2008.
+- Argentina showed a steady decline from 3.01 in 1991, crossing below the replacement threshold to 1.88 by 2019, signaling potential future population decline.
+
+### Average Fertility per Continent
+
+```{python}
+avg_fert_cont = (
+    employ_child_fert.groupby("continent")
+    .agg(mean_fertility=("woman_fertility", "mean"))
+    .reset_index()
+    .sort_values(by="mean_fertility", ascending=False)
+)
+
+fig_fert1 = px.pie(
+    avg_fert_cont,
+    names="continent",
+    values="mean_fertility",
+    color="continent",
+    title="Average Fertility per Continent (1991–2019)",
+    labels={"mean_fertility": "Average Fertility", "continent": "Continent"},
+    hover_data=["mean_fertility"],
+    color_discrete_map=continent_color,
+).update_traces(
+    textinfo="label+percent", showlegend=False
+)
+fig_fert1.show()
+```
+
+Observation:
+Africa and Oceania have significantly higher fertility rates compared to Europe, America, and parts of Asia, reflecting differences in socioeconomic conditions, healthcare access, education, and cultural norms.
+
+### Lowest Fertility Rates in 2019
+
+```{python}
+lowest20 = (
+    employ_child_fert[employ_child_fert["year"] == 2019]
+    .sort_values("woman_fertility", ascending=True)
+    .head(20)
+)
+
+fig_fert2 = px.bar(
+    lowest20,
+    y="country",
+    x="woman_fertility",
+    color="continent",
+    hover_name="continent",
+    title="Lowest Total Fertility Rates in 2019",
+    labels={
+        "continent": "Continent",
+        "woman_fertility": "Total Fertility Rate",
+        "country": "Country",
+    },
+    text_auto=".2f",
+    color_discrete_map=continent_color,
+).update_layout(
+    showlegend=False,
+    xaxis_title="Total Fertility Rate",
+    yaxis_title="Country",
+)
+fig_fert2.show()
+```
+
+Insights:
+
+- South Korea recorded the lowest fertility rate at 0.88.
+- Mauritius, the sole African country in the top 20, had a TFR of 1.35.
+- Fertility rates in Jamaica and the Bahamas were slightly higher than Mauritius. Most other countries in this group belong to Europe or Asia.
+
+## Female Employment Rate: Global Trends
+
+Definition:
+The Female Employment Rate refers to the percentage of women aged 15 and above who were employed during the given year.
+
+### Employment Trends for Selected Countries
+
+```{python}
+fig_employment = px.line(
+    employ_child_fert.query(
+        'country in ["China", "Egypt", "Australia", "Argentina", "Germany"]'
+    ),
+    x="year",
+    y="employment_rate",
+    markers=True,
+    color="country",
+    color_discrete_map=country_color_map,
+    title="Female Employment Rate Trends (1991–2019)",
+    labels={"employment_rate": "Employment Rate (%)", "year": "Year", "country": "Country"},
+).update_layout(
+    showlegend=True,
+    xaxis_title="Year",
+    yaxis_title="Employment Rate (%)",
+)
+fig_employment.show()
+```
+
+Insights:
+
+- China experienced a steady decline in employment rates, dropping from 71.6% in 1991 to 58.2% in 2019.
+- Australia and Germany showed growth, with rates increasing from 47.3% to 57.7% and 44.8% to 54.1%, respectively.
+- Egypt consistently recorded the lowest rates, ranging from 16.8% to 14.5%.
+
+### Global Map of Female Employment Rate
+
+```{python}
+map_fig2 = px.choropleth(
+    employ_child_fert,
+    locations="country_code",
+    color="employment_rate",
+    hover_name="country",
+    animation_frame="year",
+    title="Global Female Employment Rate (1991–2019)",
+    labels={
+        "country_code": "Country Code",
+        "employment_rate": "Employment Rate (%)",
+        "year": "Year",
+    },
+    color_continuous_scale="Greens",
+).update_layout(coloraxis_showscale=True)
+map_fig2.show()
+```
+
+Observation:
+The map reveals regional differences in employment rates and highlights progress made by various countries over time.
+
+### Female Employment Rate Distribution: 2018 Default
+
+```{python}
+continent_fig = px.violin(
+    employ_child_fert,
+    x="continent",
+    y="employment_rate",
+    color="continent",
+    animation_frame="year",
+    labels={
+        "continent": "Continent",
+        "employment_rate": "Employment Rate (%)",
+        "year": "Year",
+        "country": "Country",
+    },
+    title="Female Employment Rate Distribution by Continent (1991–2019)",
+    points="all",
+    hover_data=["country"],
+    color_discrete_map=continent_color,
+    box=True,
+).update_layout(
+    showlegend=False,
+    xaxis_title="Continent",
+    yaxis_title="Employment Rate",
+    sliders=[
+        {
+            "active": employ_child_fert["year"]
+            .unique()
+            .tolist()
+            .index(2018),  # Set slider to 2018 index
+        }
+    ],
+)
+
+# Ensure the animation starts at 2018 by setting the default frame
+continent_fig.frames = [
+    frame for frame in continent_fig.frames if frame.name == "2018"
+] + [
+    frame for frame in continent_fig.frames if frame.name != "2018"
+]
+
+# Show the plot
+continent_fig.show()
+
+```
+
+
+Insights (2018):
+
+- Africa and Oceania have relatively high upper bounds, while Asia shows the lowest minimum values.
+- Africa has the widest range, suggesting significant intra-continental variation.
+- Europe, America, and Oceania show smaller ranges, reflecting greater uniformity within these regions.
+
+## Home page
+
+Contains the lowest child mortality value box with the corresponding country and year. Two more value boxes with the highest total fertility rate value and the highest female employment rate value in the entire dataset.
+
+```{python}
+# Compute highest female employment rate
+highestE_row = (
+    employ_child_fert.sort_values("employment_rate", ascending=False).head(1).squeeze()
+)
+highest_employ_rat_country = highestE_row["country"]
+highest_employ_rat_value = round(highestE_row["employment_rate"], 2)
+highest_employ_rat_year = highestE_row["year"]
+print(f"Highest Female Employment Rate: {highest_employ_rat_value}% (Country: {highest_employ_rat_country}, Year: {highest_employ_rat_year})")
+
+# Compute lowest child mortality
+lowest_row = (
+    employ_child_fert.sort_values("mortality", ascending=True).head(1).squeeze()
+)
+lowest_mortality_country = lowest_row["country"]
+lowest_mortality_value = round(lowest_row["mortality"], 1)
+lowest_mortality_year = lowest_row["year"]
+print(f"Lowest Child Mortality: {lowest_mortality_value} (Country: {lowest_mortality_country}, Year: {lowest_mortality_year})")
+
+# Compute highest total fertility rate
+highestF_row = (
+    employ_child_fert.sort_values("woman_fertility", ascending=False).head(1).squeeze()
+)
+highest_fertility_country = highestF_row["country"]
+highest_fertility_value = round(highestF_row["woman_fertility"], 2)
+highest_fertility_year = highestF_row["year"]
+print(f"Highest Total Fertility Rate: {highest_fertility_value} (Country: {highest_fertility_country}, Year: {highest_fertility_year})")
+
+``` 
+
+This page shows an overview of the analysis, then the other pages have details on the analysis including some interpretations. Define a function that takes employment_rate as an input and assign it to a category of four groups.
+
+```{python}
+def assign_employ_group(employ_rate):
+    """
+    Categorizes employment rates into four groups:
+    - 3-35%: Low employment
+    - 36-46%: Moderate employment
+    - 47-58%: High employment
+    - 58-90%: Very high employment
+    """
+    if employ_rate >= 3 and employ_rate < 36:
+        return "3-35"
+    elif employ_rate >= 36 and employ_rate < 47:
+        return "36-46"
+    elif employ_rate >= 47 and employ_rate < 58:
+        return "47-57"
+    elif employ_rate >= 58:
+        return "58-90"
+    else:
+        return "Invalid"
+
+
+# assign_employ_group(20)
+assign_employ_groupVec = np.vectorize(assign_employ_group)
+
+employ_child_fert["employ_group"] = assign_employ_groupVec(
+    employ_child_fert["employment_rate"]
+)
+
+# Create summary table for employ groups
+employ_mortality_table = (
+    employ_child_fert.groupby("employ_group")
+    .agg(
+        mean_mortality_employ=("mortality_pct", "mean"),
+        num_inds=("mortality_pct", "size"),
+    )
+    .reset_index()
+)
+
+fig_mix = px.bar(
+    employ_mortality_table,
+    x="employ_group",
+    y="mean_mortality_employ",
+    title="Average Child Mortality per Grouped Employment Rate",
+    labels={
+        "mean_mortality_employ": "Child Mortality",
+        "employ_group": "Employment Rate Group",
+    },
+    text_auto=".1f",
+).update_layout(
+    showlegend=False,
+    xaxis_title="Female Employment Rate Group (%)",
+    yaxis_title="Child Mortality (%)",
+)
+fig_mix.update_traces(marker_color="#2ca02c")
+fig_mix
+```
+
+Most of the countries with the female employment rate of 58% to 90% have the highest average of child mortality, followed by the lowest employment group. This might be due to most developing countries in Africa and some in Asia.
+
+The relationship between these three indicators can be displayed with a scatter plot, setting employment_rate as the size of the bubbles and the forth variable "year" as the animation frame.
+
+```{python}
+fig_mix1 = px.scatter(
+    employ_child_fert,
+    y="mortality_pct",
+    x="woman_fertility",
+    animation_frame="year",
+    color="continent",
+    title="Child Mortality vs. Woman's fertility (Bubble size: Female Employment Rate)",
+    size="employment_rate",
+    hover_name="country",
+    color_discrete_map=continent_color,
+    labels={
+        "country": "Country",
+        "woman_fertility": "Woman's Fertility",
+        "year": "Year",
+        "mortality_pct": "Child Mortality",
+        "continent": "Continent",
+        "employment_rate": "Employment Rate",
+    },
+).update_layout(
+    showlegend=False,
+    xaxis_title="Total Fertility Rate",
+    yaxis_title="Child Mortality (%)",
+)
+
+fig_mix1
+```
+
+Most African countries have high child mortality and woman's fertility in 1991 with few Asian countries. In 2019, child mortality has reduced by half from about 30% in 1991 yet the number of babies per woman are still above 3 for most African countries.
+
+## Data Download
+
+```{python}
+# | title: Child mortality, total fertility and female employment rate dataset (1991 to 2019)
+
+employ_child_fert = employ_child_fert.rename(
+    columns={
+        "country": "Country/area",
+        "country_code": "Country Code",
+        "continent": "Continent",
+        "year": "Year",
+        "mortality": "Child Mortality",
+        "woman_fertility": "Fertility Rate",
+        "employment_rate": "Employment Rate",
+    }
+)
+employ_child_fert = employ_child_fert.drop(columns=['mortality_pct', 'employ_group'])
+
+# Column descriptions
+column_descriptions = """
+- Country/area: The name of the country or area.
+- Country Code: The ISO code for the country.
+- Continent: The continent where the country is located.
+- Year: The year of observation.
+- Child Mortality: Number of deaths under age 5 per 1000 live births.
+- Fertility Rate: Number of children a woman would have in her lifetime based on current age-specific fertility rates.
+- Employment Rate: Percentage of females aged 15+ employed.
+"""
+
+print(column_descriptions)
+
+# Display full dataset with itables
+show(
+    employ_child_fert,
+    buttons=["csvHtml5"],
+)
+```
+
+## About
+
+The data used for this PBB's capstone project was obtained from [Gapminder's data repository](https://gapminder.org/data). Three indicators were selected for analysis namely; "child mortality", "total fertilty rate", and "female employment rate".
+
+Child mortality is for 0 to 5 year olds dying per 1000 born.
+Total fertility rate is the number of children that would be born to a woman if she were to live to the end of her childbearing years and bear children in accordance with age-specific fertility rates of the specified year.
+Female employment rate is the percentage of female population, age group 15+, that has been employed during the given year.
+
+The Gapminder Foundation is a non-profit venture that promotes sustainable global development and achievement of the United Nations Millennium Development Goals by increasing use and understanding of statistics and other information about social, economic, and environmental development.
+
+**Watch Hans Rosling on Child Mortality in Developing Countries:**
+
+<iframe width="560" height="315" src="https://youtube.com/embed/OwII-dwh-bk?si=iVzuHDVHmiGmM_6b" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+
+```{python}
+#### This code causes issues with unintended rendering of the figure to the dashborad, switch to plotly.express ####
+
+# Filter the data
+# filtered_data = employ_child_fert.query(
+#     'country == ["China", "Egypt", "Australia", "Argentina", "Germany"]'
+# )
+
+# Create the figure
+# fig2 = go.Figure()
+# # include: False
+
+# # Add scatter plot for 'employment_rate' vs. 'year' (y-axis 1)
+# for country in filtered_data["country"].unique():
+#     country_data = filtered_data[filtered_data["country"] == country]
+#     fig2.add_trace(
+#         go.Scatter(
+#             x=country_data["year"],
+#             y=country_data["employment_rate"],
+#             mode="markers",
+#             name=f"{country} (Employment)",
+#             legendgroup=country,
+#             showlegend=False,
+#             marker=dict(color=color_map[country]),  # Assign color
+#         )
+#     )
+
+# ##include: False
+# # Add a secondary y-axis for 'woman_fertility' (y-axis 2)
+# for country in filtered_data["country"].unique():
+#     country_data = filtered_data[filtered_data["country"] == country]
+#     fig2.add_trace(
+#         go.Scatter(
+#             x=country_data["year"],
+#             y=country_data["woman_fertility"],
+#             mode="lines",
+#             name=f"{country} (Woman's Fertility)",
+#             yaxis="y2",
+#             showlegend=False,  # Avoid duplicate legends
+#             line=dict(color=color_map[country]),  # Assign matching color
+#         )
+#     )
+
+# # include: False
+# # Update layout to include a second y-axis
+# fig2.update_layout(
+#     title="The Woman's Fertility and Employment Rate from 1991 to 2019",
+#     xaxis=dict(title="Year"),
+#     yaxis=dict(title="Female Employment Rate", side="left"),
+#     yaxis2=dict(
+#         title="Total Fertility Rate", overlaying="y", side="right", showgrid=False
+#     ),
+#     legend=dict(
+#         orientation="h",  # Horizontal orientation
+#         yanchor="top",  # Anchor at the top of the legend box
+#         y=-0.2,  # Position it below the plot (adjust as needed)
+#         xanchor="center",  # Center align the legend
+#         x=0.5,  # Place at the center of the plot horizontally
+#     ),
+#     legend_title="Country",
+# )
+# include: False
+
+
+```

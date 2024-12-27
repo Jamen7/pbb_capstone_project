@@ -1,5 +1,5 @@
 ---
-title: "Statistics Dashboard with Quarto"
+title: "Analyzing Global Trends in Child Mortality, Fertility, and Employment"
 format: html
 author: "James Matosse"
 ---
@@ -8,8 +8,8 @@ author: "James Matosse"
 
 ## Datasets
 
-Three datasets were downloaded from the Gapminder; "child mortality", "woman fertilty", "females employment rate".
-Child mortality is for 0 to 5 year olds dying per 1000 born.
+Three datasets were downloaded from the Gapminder: Child Mortality, Women's Fertility, and Female Employment Rate.
+The Child Mortality dataset measures the number of deaths of children under five years old per 1,000 live births.
 Total fertility rate is the number of children that would be born to a woman if she were to live to the end of her childbearing years and bear children in accordance with age-specific fertility rates of the specified year.
 Female employment rate the percentage of female population, age group 15+, that has been employed during the given year.
 
@@ -51,6 +51,13 @@ fertility_long = fertility_wide.melt(
 employ_long = employ_wide.melt(
     id_vars="country", var_name="year", value_name="employment_rate"
 )
+
+def melt_data(df, value_name):
+    return df.melt(id_vars="country", var_name="year", value_name=value_name)
+
+child_mortality_long = melt_data(child_mortality, "mortality")
+fertility_long = melt_data(fertility_wide, "woman_fertility")
+employ_long = melt_data(employ_wide, "employment_rate")
 ```
 
 The `child_mortality_long` and `fertility_long` datasets have observations from the year 1800 to current and projections to year 2100. The analysis will focus on 1991 to 2019 corresponding with the `employ_long` dataset. The coco library will have difficulty converting the country UAE to a country code according to ISO3, likewise the Channel Islands country will not be recognised. Therefore, these country names will be replaced by their alternatives.
@@ -69,6 +76,11 @@ employ_long["country"] = employ_long["country"].replace(
     "Channel Islands", "United Kingdom"
 )
 
+#Combining string replacements for efficiency:
+replacements = {"UAE": "United Arab Emirates", "Channel Islands": "United Kingdom"}
+for df in [child_mortality_long, fertility_long, employ_long]:
+    df["country"] = df["country"].replace(replacements)
+
 # Merge child_mortality_long with fertility_long on both country and year applying a left join
 child_fertility = pd.merge(
     child_mortality_long,
@@ -84,6 +96,19 @@ child_fertility_sub = child_fertility.query("year >= 1991 and year <= 2019")
 
 # set the "year" to an integer
 employ_long["year"] = employ_long["year"].astype(int)
+
+# Consolidate year conversion:
+for df in [child_mortality_long, fertility_long, employ_long]:
+    df["year"] = df["year"].astype(int)
+
+# Merge datasets on 'country' and 'year'
+child_fertility = pd.merge(
+    child_mortality_long, fertility_long, on=["country", "year"], how="left"
+)
+
+# Filter data to include only years 1991 to 2019
+child_fertility_sub = child_fertility.query("1991 <= year <= 2019")
+
 ```
 
 To include the `employ_long` to the `child_fertility_sub`, both datasets need a uniform country code to ensure consistency. The country code will also be used as the locations for the choropleth plot for the world's map.
@@ -177,6 +202,9 @@ color_map = {
     "Argentina": "orange",
     "Germany": "purple",
 }
+
+# Convert mortality to a percentage
+employ_child_fert["mortality_pct"] = employ_child_fert["mortality"] / 10
 
 px.line(
     employ_child_fert.query('country == ["China", "Egypt", "Australia", "Argentina", "Germany"]'),
@@ -437,7 +465,7 @@ highestF_row = (
     employ_child_fert.sort_values("woman_fertility", ascending=False).head(1).squeeze()
 )
 highest_fertility_country = highestF_row["country"]
-highest_fertility_value = round(highestF_row["employment_rate"], 2)
+highest_fertility_value = round(highestF_row["woman_fertility"], 2)
 highest_fertility_year = highestF_row["year"]
 print(f"Highest Total Fertility Rate is {highest_fertility_value} from {highest_fertility_country} in {highest_fertility_year}")
 ``` 
@@ -476,7 +504,7 @@ employ_mortality_table = (
 )
 
 
-figl = px.bar(
+fig_mix = px.bar(
     employ_mortality_table,
     x="employ_group",
     y="mean_mortality_employ",
@@ -491,17 +519,20 @@ figl = px.bar(
     xaxis_title="Female Employment Rate Group (%)",
     yaxis_title="Child Mortality (%)",
 )
-figl
+fig_mix
 ```
 
+Most of the countries with the female employment rate of 58% to 90% have the highest average of child mortality, followed by the lowest employment group. This might be due to most developing countries in Africa and some in Asia.
+The relationship between these three indicators can be displayed with a scatter plot, setting employment_rate as the size of the bubbles and the forth variable "year" as the animation frame.
+
 ```{python}
-fig_fe = px.scatter(
+fig_mix1 = px.scatter(
     employ_child_fert,
     y="mortality_pct",
     x="woman_fertility",
     animation_frame="year",
     color="continent",
-    title="The Woman's fertility vs. Child Mortality",
+    title="Child Mortality vs. Woman's fertility",
     size="employment_rate",
     hover_name="country",
     color_discrete_map=continent_color,
@@ -518,13 +549,15 @@ fig_fe = px.scatter(
     xaxis_title="Total Fertility Rate",
     yaxis_title="Child Mortality (%)",
 )
-fig_fe
+fig_mix1
 ```
+
+Most African countries had high child mortality and woman's fertility in 1991 with few Asian countries. In 2019, child mortality has reduced by half from about 30% in 1991 yet the number of babies per woman are still above 3 for most African countries.
 
 ## Data Download
 
 ```{python}
-# | title: Child mortality, total fertility and employment rate dataset (1991 to 2019)
+# | title: Child mortality, total fertility and female employment rate dataset (1991 to 2019)
 
 employ_child_fert = employ_child_fert.rename(
     columns={
@@ -562,9 +595,6 @@ Gapminder is an independent Swedish foundation with no political, religious or e
 
 
 ```{python}
-# Suppress rendering
-#include: False
-
 
 # This code causes issues with unintended rendering of the figure to the dashborad, switch to plotly.express
 

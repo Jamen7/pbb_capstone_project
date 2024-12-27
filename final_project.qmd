@@ -1,5 +1,5 @@
 ---
-title: "Gapminder | Child Mortality & Fertility Rate"  
+title: "Child Mortality, Fertility, and Employment"  
 author: "James Matosse"
 format: 
     dashboard:
@@ -20,6 +20,10 @@ from itables import show
 import country_converter as coco
 from IPython.display import Markdown
 
+import warnings
+# Suppress warnings for cleaner output
+warnings.filterwarnings("ignore")
+
 # Load the data
 child_mortality = pd.read_csv(
     "data/child_mortality_0_5_year_olds_dying_per_1000_born.csv"
@@ -27,6 +31,67 @@ child_mortality = pd.read_csv(
 fertility_wide = pd.read_csv("data/children_per_woman_total_fertility.csv")
 employ_wide = pd.read_csv("data/females_aged_15plus_employment_rate_percent.csv")
 
+## data cleaning
+def melt_data(df, value_name):
+    return df.melt(id_vars="country", var_name="year", value_name=value_name)
+
+child_mortality_long = melt_data(child_mortality, "mortality")
+fertility_long = melt_data(fertility_wide, "woman_fertility")
+employ_long = melt_data(employ_wide, "employment_rate")
+
+replacements = {"UAE": "United Arab Emirates", "Channel Islands": "United Kingdom"}
+for df in [child_mortality_long, fertility_long, employ_long]:
+    df["country"] = df["country"].replace(replacements)
+    df["year"] = df["year"].astype(int)
+
+# Merge datasets
+child_fertility = pd.merge(
+    child_mortality_long, fertility_long, on=["country", "year"], how="left"
+)
+
+# Filter for analysis years
+filtered_child_fertility = child_fertility.query("1991 <= year <= 2019")
+
+# Convert 'country' to ISO3 country codes
+filtered_child_fertility["country_code"] = coco.convert(
+    names=filtered_child_fertility["country"], to="ISO3"
+)
+employ_long["country_code"] = coco.convert(
+    names=employ_long["country"], to="ISO3"
+)
+
+# Merge datasets on 'country_code' and 'year'
+employ_child_fert = pd.merge(
+    filtered_child_fertility,
+    employ_long,
+    on=["country_code", "year"],
+    how="left",
+)
+
+# Drop duplicate 'country_y' column and rename 'country_x' to 'country'
+employ_child_fert = employ_child_fert.drop(columns="country_y").rename(
+    columns={"country_x": "country"}
+)
+
+# Assign continents based on country names
+employ_child_fert["continent"] = employ_child_fert["country"].apply(
+    lambda x: coco.convert(names=x, to="continent")
+)
+
+# Reorder columns for logical grouping
+col_list = list(employ_child_fert.columns)
+col_list.insert(1, col_list.pop(4))  # Move 'country_code' to 2nd position
+col_list.insert(2, col_list.pop(6))  # Move 'continent' to 3rd position
+employ_child_fert = employ_child_fert[col_list]
+
+# Remove rows with missing values
+employ_child_fert = employ_child_fert.dropna()
+
+```
+
+
+```{python}
+## Data Manipulation and Visualization
 # Subset the data to include `country`, `1999`, and `2019` columns only.
 table_df = child_mortality[["country", "1999", "2019"]]
 table_df = table_df.rename(columns={"country": "Country/area"})
@@ -34,7 +99,7 @@ table_df = table_df.rename(columns={"country": "Country/area"})
 # Calculate absolute change as the difference between 2019 and 1999
 table_df["Absolute Change"] = table_df["2019"] - table_df["1999"]
 
-# Calculate relative change as the absolute change divided by the 2000 emissions, then multiplied by 100
+# Calculate relative change as a percentage
 table_df["Relative Change"] = (
     (table_df["2019"] - table_df["1999"]) / table_df["1999"]
 ) * 100
@@ -42,130 +107,218 @@ table_df["Relative Change"] = (
 # Round to 0 decimal places, and add a % sign to the relative change
 table_df["Relative Change"] = table_df["Relative Change"].round(0).astype(str) + "%"
 
-# Data cleaning
-child_mortality_long = child_mortality.melt(
-    id_vars="country", var_name="year", value_name="mortality"
-)
-child_mortality_long["country"] = child_mortality_long["country"].replace(
-    {"UAE": "United Arab Emirates"}
-)
+# Define a consistent color mapping for continents and countries
+country_color_map = {
+    "China": "#d62728",
+    "Egypt": "#1f77b4",
+    "Australia": "#2ca02c",
+    "Argentina": "#ff7f0e",
+    "Germany": "#9467bd",
+}
 
-# Convert 'country' to a 'country code' and add it as a new variable
-child_mortality_long["country_code"] = coco.convert(
-    child_mortality_long["country"], to="ISO3"
-)
-
-child_mortality_long["year"] = child_mortality_long["year"].astype(int)
-
-child_subset = child_mortality_long.query("year >= 1991 and year <= 2019")
-
-# Creates continent variable to the assigned country
-child_subset["continent"] = child_subset["country"].apply(
-    lambda x: coco.convert(names=x, to="continent")
-)
-
-fertility_long = fertility_wide.melt(
-    id_vars="country", var_name="year", value_name="woman_fertility"
-)
-
-fertility_long["country"] = fertility_long["country"].replace(
-    {"UAE": "United Arab Emirates"}
-)
-
-fertility_long["country_code"] = coco.convert(fertility_long["country"], to="ISO3")
-
-fertility_long["year"] = fertility_long["year"].astype(int)
-
-fertility_sub = fertility_long.query("year >= 1991 and year <= 2019")
-# Merged datasets
-child_fertility = pd.merge(
-    child_subset,
-    fertility_sub,
-    on=["country_code", "year"],
-    how="left",
-)
-
-child_fertility = child_fertility.drop(columns="country_y").rename(
-    columns={"country_x": "country"}
-)
-
-col_list = list(child_fertility.columns)
-
-col_list.insert(
-    1, col_list.pop(3)
-)  # Pop the 4th column (index 3) and insert at the 2nd
-# col_list
-col_list.insert(
-    2, col_list.pop(4)
-)  # Pop the 5th column (index 4) and insert at the 3rd
-child_fertility = child_fertility[col_list]
-
-employ_long = employ_wide.melt(
-    id_vars="country", var_name="year", value_name="employment_rate"
-)
-
-employ_long["country"] = employ_long["country"].replace({"UAE": "United Arab Emirates"})
-# Replace "Channel Islands" with "United Kingdom"
-employ_long["country"] = employ_long["country"].replace(
-    "Channel Islands", "United Kingdom"
-)
-
-employ_long["country_code"] = coco.convert(employ_long["country"], to="ISO3")
-
-employ_long["year"] = employ_long["year"].astype(int)
-
-employ_child_fert = pd.merge(
-    child_fertility,
-    employ_long,
-    on=["country_code", "year"],
-    how="left",
-)
-employ_child_fert = employ_child_fert.drop(columns="country_y").rename(
-    columns={"country_x": "country"}
-)
-
-```
-
-
-```{python}
-
-employ_child_fert = employ_child_fert.dropna()  # Remove rows with NaN values
-
-# Define a color mapping for consistency
 continent_color = {
-    "Asia": "red",
-    "Africa": "blue",
-    "Oceania": "green",
-    "America": "orange",
-    "Europe": "purple",
+    "Africa": "#1f77b4",
+    "America": "#ff7f0e",
+    "Oceania": "#2ca02c",
+    "Asia": "#d62728",
+    "Europe": "#9467bd",
 }
 
-color_map = {
-    "China": "red",
-    "Egypt": "blue",
-    "Australia": "green",
-    "Argentina": "orange",
-    "Germany": "purple",
-}
-
+# Convert mortality rate to percentage for consistency in scaling (if required elsewhere)
 employ_child_fert["mortality_pct"] = employ_child_fert["mortality"] / 10
 
+# Find the country with the lowest mortality per continent
+lowest_mortality = employ_child_fert.loc[
+    employ_child_fert.groupby("continent")["mortality"].idxmin()
+].sort_values("mortality")
 
-highest_mortality = child_subset.loc[
-    child_subset.groupby("continent")["mortality"].idxmax()
-].sort_values(["mortality"], ascending=False)
+# Bar chart for lowest child mortality by continent
+fig_bar = px.bar(
+    lowest_mortality,
+    x="continent",
+    y="mortality",
+    color="country",
+    title="Lowest Child Mortality per Continent (2019)",
+    labels={
+        "mortality": "Child Mortality",
+        "continent": "Continent",
+        "country": "Country",
+    },
+    text_auto=".1f",
+)
 
-lowest_mortality = child_subset.loc[
-    child_subset.groupby("continent")["mortality"].idxmin()
-].sort_values(["mortality"], ascending=True)
+# Animated map of child mortality
+map_fig = px.choropleth(
+    employ_child_fert,
+    locations="country_code",
+    color="mortality",
+    hover_name="country",
+    animation_frame="year",
+    title="Global Child Mortality (1991–2019)",
+    color_continuous_scale="Reds",
+    labels={
+        "country_code": "Country Code",
+        "mortality": "Child Mortality",
+        "year": "Year",
+    },
+).update_layout(
+    coloraxis_showscale=True
+)  # Add scale visibility
 
-fig_fe = px.scatter(
+
+fig_fert = px.line(
+    employ_child_fert.query(
+        'country in ["China", "Egypt", "Australia", "Argentina", "Germany"]'
+    ),
+    x="year",
+    y="woman_fertility",
+    color="country",
+    title="Women's Fertility Trends (1991–2019)",
+    markers=True,
+    color_discrete_map=country_color_map,
+    labels={
+        "country": "Country",
+        "woman_fertility": "Total Fertility Rate (TFR)",
+        "year": "Year",
+    },
+).update_layout(
+    showlegend=True,
+    xaxis_title="Year",
+    yaxis_title="Total Fertility Rate",
+)
+
+avg_fert_cont = (
+    employ_child_fert.groupby("continent")
+    .agg(mean_fertility=("woman_fertility", "mean"))
+    .reset_index()
+    .sort_values(by="mean_fertility", ascending=False)
+)
+
+fig_fert1 = px.pie(
+    avg_fert_cont,
+    names="continent",
+    values="mean_fertility",
+    color="continent",
+    title="Average Fertility per Continent (1991–2019)",
+    labels={"mean_fertility": "Average Fertility", "continent": "Continent"},
+    hover_data=["mean_fertility"],
+    color_discrete_map=continent_color,
+).update_traces(textinfo="label+percent", showlegend=False)
+
+lowest20 = (
+    employ_child_fert[employ_child_fert["year"] == 2019]
+    .sort_values("woman_fertility", ascending=True)
+    .head(20)
+)
+
+fig_fert2 = px.bar(
+    lowest20,
+    y="country",
+    x="woman_fertility",
+    color="continent",
+    hover_name="continent",
+    title="Lowest Total Fertility Rates in 2019",
+    labels={
+        "continent": "Continent",
+        "woman_fertility": "Total Fertility Rate",
+        "country": "Country",
+    },
+    color_discrete_map=continent_color,
+    text_auto=".2f",
+).update_layout(
+    showlegend=False,
+    xaxis_title="Total Fertility Rate",
+    yaxis_title="Country",
+)
+
+# Create the map using plotly express with a green color scale
+map_fig2 = px.choropleth(
+    employ_child_fert,
+    locations="country_code",
+    color="employment_rate",
+    hover_name="country",
+    animation_frame="year",
+    title="Global Female Employment Rate (1991–2019)",
+    labels={
+        "country_code": "Country Code",
+        "employment_rate": "Employment Rate (%)",
+        "year": "Year",
+    },
+    color_continuous_scale="Greens",
+).update_layout(
+    coloraxis_showscale=True,
+)
+
+
+# Home page information
+def assign_employ_group(employ_rate):
+    """
+    Categorizes employment rates into four groups:
+    - 3-35%: Low employment
+    - 36-46%: Moderate employment
+    - 47-57%: High employment
+    - 58-90%: Very high employment
+    """
+    if employ_rate >= 3 and employ_rate < 36:
+        return "3-35"
+    elif employ_rate >= 36 and employ_rate < 47:
+        return "36-46"
+    elif employ_rate >= 47 and employ_rate < 58:
+        return "47-57"
+    elif employ_rate >= 58:
+        return "58-90"
+    else:
+        return "Invalid"
+
+
+# assign_employ_group(20)
+assign_employ_groupVec = np.vectorize(assign_employ_group)
+
+employ_child_fert["employ_group"] = assign_employ_groupVec(
+    employ_child_fert["employment_rate"]
+)
+
+# Create summary table for employ groups
+employ_mortality_table = (
+    employ_child_fert.groupby("employ_group")
+    .agg(
+        mean_mortality_employ=("mortality_pct", "mean"),
+        num_inds=("mortality_pct", "size"),
+    )
+    .reset_index()
+)
+
+fig_mix = (
+    px.bar(
+        employ_mortality_table,
+        x="employ_group",
+        y="mean_mortality_employ",
+        title="Average Child Mortality per Grouped Employment Rate",
+        labels={
+            "mean_mortality_employ": "Child Mortality",
+            "employ_group": "Employment Rate Group",
+        },
+        text_auto=".1f",
+    )
+    .update_layout(
+        showlegend=False,
+        xaxis_title="Female Employment Rate Group (%)",
+        yaxis_title="Child Mortality (%)",
+    )
+    .update_traces(
+        marker_color="#2ca02c",
+        text=employ_mortality_table["mean_mortality_employ"].round(1),
+        textposition="outside",
+    )
+)
+
+fig_mix1 = px.scatter(
     employ_child_fert,
     y="mortality_pct",
     x="woman_fertility",
     animation_frame="year",
     color="continent",
-    title="The Woman's fertility vs. Child Mortality",
+    title="Child Mortality vs. Woman's fertility (bubble size: Female Employment Rate)",
     size="employment_rate",
     hover_name="country",
     color_discrete_map=continent_color,
@@ -183,179 +336,14 @@ fig_fe = px.scatter(
     yaxis_title="Child Mortality (%)",
 )
 
-fig = px.bar(
-    lowest_mortality,
-    y="continent",
-    x="mortality",
-    color="country",
-    title="Lowest Child Mortality per Continent in 2019",
-    labels={
-        "mortality": "Child Mortality",
-        "continent": "Continent",
-        "country": "Country",
-    },
-    #    color_discrete_map=continent_color,
-).update_layout(showlegend=False)
-
-
-# Create the map using plotly express with a red color scale
-map_fig = px.choropleth(
-    child_subset,
-    locations="country_code",
-    color="mortality",
-    hover_name="country",
-    animation_frame="year",
-    title="Map of Countries by Child Mortality",
-    labels={
-        "country_code": "Country Code",
-        "mortality": "Child Mortality",
-        "year": "Year",
-    },
-    color_continuous_scale="Reds",
-).update_layout(coloraxis_showscale=True)
-
-
-fig_fert = px.line(
-    child_fertility.query(
-        'country == ["China", "Egypt", "Australia", "Argentina", "Germany"]'
-    ),
-    x="year",
-    y="woman_fertility",
-    color="country",
-    title="The Woman's Fertility from 1991 to 2019",
-    markers=True,
-    color_discrete_map=color_map,
-    labels={
-        "country": "Country",
-        "woman_fertility": "Woman's Fertility",
-        "year": "Year",
-    },
-).update_layout(
-    showlegend=False, xaxis_title="Year", yaxis_title="Total Fertility Rate"
-)
-
-highest_fertility = child_fertility.loc[
-    child_fertility.groupby("continent")["woman_fertility"].idxmax()
-].sort_values(["woman_fertility"], ascending=False)
-
-lowest_fertility = child_fertility.loc[
-    child_fertility.groupby("continent")["woman_fertility"].idxmin()
-].sort_values(["woman_fertility"], ascending=True)
-
-filter_year = employ_child_fert.query("year == 2019")
-highest_employ = (
-    filter_year.loc[filter_year.groupby("continent")["employment_rate"].idxmax()]
-    .dropna()  # Remove rows with NaN values
-    .sort_values(["employment_rate"], ascending=False)
-)
-
-lowest_employ = employ_child_fert.loc[
-    employ_child_fert.groupby("continent")["employment_rate"].idxmin()
-].sort_values(["employment_rate"], ascending=True)
-
-# Create the map using plotly express with a green color scale
-map_fig2 = px.choropleth(
-    employ_child_fert,
-    locations="country_code",
-    color="employment_rate",
-    hover_name="country",
-    animation_frame="year",
-    title="Map of Countries for Female Employment Rate",
-    labels={
-        "country_code": "Country Code",
-        "employment_rate": "Employment Rate",
-        "year": "Year",
-    },
-    color_continuous_scale="Greens",
-).update_layout(coloraxis_showscale=True)
-
-
-avg_fert_cont = (
-    employ_child_fert.groupby("continent")
-    .agg(mean_fertility=("woman_fertility", "mean"))
-    .reset_index()
-    .sort_values(by="mean_fertility", ascending=False)
-)
-
-fig_fert1 = px.pie(
-    avg_fert_cont,
-    names="continent",
-    values="mean_fertility",
-    color="continent",
-    title="Average Woman's Fertility per Continent",
-    labels={"mean_fertility": "Average Fertility", "continent": "Continent"},
-    hover_data=["mean_fertility"],
-    color_discrete_map=continent_color,
-).update_traces(
-    textinfo="label+percent", showlegend=False  # Show label and percent
-)
-
-
-def assign_employ_group(employ_rate):
-    if employ_rate >= 3 and employ_rate < 36:
-        return "3-35"
-    elif employ_rate >= 36 and employ_rate < 47:
-        return "36-46"
-    elif employ_rate >= 47 and employ_rate < 58:
-        return "47-58"
-    elif employ_rate >= 58:
-        return "58-90"
-    else:
-        return "Invalid"
-
-
-# assign_employ_group(20)
-assign_employ_groupVec = np.vectorize(assign_employ_group)
-
-employ_child_fert["employ_group"] = assign_employ_groupVec(
-    employ_child_fert["employment_rate"]
-)
-
-
-# Use pd.cut() to group
-
-# Creating bin employment_rate into 4 intervals
-# nbins = [3, 37, 46, 57, 90]
-# employ_child_fert["employ_group"] = pd.cut(employ_child_fert["employment_rate"], nbins)
-
-
-# Tabulate age groups
-# employ_child_fert["employ_group"].value_counts(normalize=True)
-
-# Create summary table for employ groups
-employ_mortality_table = (
-    employ_child_fert.groupby("employ_group")
-    .agg(
-        mean_mortality_employ=("mortality_pct", "mean"),
-        num_inds=("mortality_pct", "size"),
-    )
-    .reset_index()
-)
-
-
-figl = px.bar(
-    employ_mortality_table,
-    x="employ_group",
-    y="mean_mortality_employ",
-    title="Average Child Mortality per Grouped Employment Rate",
-    labels={
-        "mean_mortality_employ": "Child Mortality",
-        "employ_group": "Employment Rate Group",
-    },
-    #    color_discrete_map=continent_color,
-).update_layout(
-    showlegend=False,
-    xaxis_title="Female Employment Rate Group (%)",
-    yaxis_title="Child Mortality (%)",
-)
-
-# Compute highest employment rate
+# Compute highest female employment rate
 highestE_row = (
     employ_child_fert.sort_values("employment_rate", ascending=False).head(1).squeeze()
 )
 highest_employ_rat_country = highestE_row["country"]
 highest_employ_rat_value = round(highestE_row["employment_rate"], 2)
 highest_employ_rat_year = highestE_row["year"]
+
 
 # Compute lowest child mortality
 lowest_row = (
@@ -365,20 +353,15 @@ lowest_mortality_country = lowest_row["country"]
 lowest_mortality_value = round(lowest_row["mortality"], 1)
 lowest_mortality_year = lowest_row["year"]
 
-# Compute highest fertility rate
+
+# Compute highest total fertility rate
 highestF_row = (
     employ_child_fert.sort_values("woman_fertility", ascending=False).head(1).squeeze()
 )
 highest_fertility_country = highestF_row["country"]
-highest_fertility_value = round(highestF_row["employment_rate"], 2)
+highest_fertility_value = round(highestF_row["woman_fertility"], 2)
 highest_fertility_year = highestF_row["year"]
 
-
-lowest20 = (
-    employ_child_fert[employ_child_fert["year"] == 2019]
-    .sort_values("woman_fertility", ascending=True)
-    .head(20)
-)
 ```
 
 
@@ -404,7 +387,7 @@ lowest20 = (
 
 ::: {.valuebox icon="mortarboard-fill" color="#4682B4" title="Highest Female Employment Rate"}
 
-`{python} str(highest_employ_rat_value + %)`
+`{python} str(highest_employ_rat_value)`
 
 `{python} highest_employ_rat_country` in `{python} str(highest_employ_rat_year)`
 
@@ -415,13 +398,13 @@ lowest20 = (
 ### Comumn {width="60%"}
 
 ```{python}
-fig_fe
+fig_mix1
 ```
 
 ### Column 
 
 ```{python}
-figl
+fig_mix
 ```
 
 # Child Mortality 
@@ -431,10 +414,9 @@ figl
 ### Column {width="60%"}
 
 ```{python}
-#| title: Child Mortality
-#show(table_df, caption="Child Mortality")
+#| title: Child Mortality (1991–2019)
 Markdown(table_df.to_markdown())
-# This table can be filtered alphabetically by country or sorted in ascending/descending order by any other column.
+
 ```
 
 ### Column {.tabset width="40%"}
@@ -442,13 +424,13 @@ Markdown(table_df.to_markdown())
 #### Map
 
 ```{python}
-map_fig
+map_fig.show()
 ```
 
 #### Chart
 
 ```{python}
-fig
+fig_bar
 ```
 
 ## Row {height="20%"}
@@ -482,23 +464,6 @@ There is a clear divide between continents with higher fertility rates (Africa a
 ## Column 2 
 
 ```{python}
-
-# Create the bar plot
-fig_fert2 = px.bar(
-    lowest20,
-    y='country',
-    x='woman_fertility',
-    color='continent',  # Use continent for coloring
-    hover_name='continent',
-    title='Lowest Total Fertility Rate in 2019',
-    labels={'continent': 'Continent', 'woman_fertility': "Woman's Fertility", 'country': 'Country'},
-    color_discrete_map=continent_color  # Apply the predefined color mapping
-).update_layout(
-    showlegend=False,
-    xaxis_title="Total Fertility Rate",
-    yaxis_title="Country"
-    )
-
 fig_fert2
 ```
 
@@ -512,11 +477,16 @@ continent_fig = px.violin(
     x="continent",
     y="employment_rate",
     color="continent",
-    animation_frame="year",  # Add animation for the year
-    labels={'continent': 'Continent', 'employment_rate': 'Employment Rate', 'year': 'Year', 'country': 'Country'},
-    title="Distribution of Female Employment Rate by Continent (1991-2019)",
-    points="all",  # This shows all data points
-    hover_data=["country"],  # This adds country names to hover info
+    animation_frame="year",
+    labels={
+        "continent": "Continent",
+        "employment_rate": "Employment Rate (%)",
+        "year": "Year",
+        "country": "Country",
+    },
+    title="Female Employment Rate Distribution by Continent (1991–2019)",
+    points="all",
+    hover_data=["country"],
     color_discrete_map=continent_color,
     box=True,
 ).update_layout(
@@ -540,6 +510,7 @@ continent_fig.frames = [
     frame for frame in continent_fig.frames if frame.name != "2018"
 ]
 
+# Show the plot
 continent_fig
 ```
 
@@ -563,7 +534,7 @@ Asia also shows a broad range, with some countries having very low employment ra
 # Data Download
 
 ```{python}
-# | title: Child mortality, total fertility and employment rate dataset (1991 to 2019)
+# | title: Child mortality, total fertility and female employment rate dataset (1991 to 2019)
 
 employ_child_fert = employ_child_fert.rename(
     columns={
@@ -576,7 +547,21 @@ employ_child_fert = employ_child_fert.rename(
         "employment_rate": "Employment Rate",
     }
 )
-employ_child_fert = employ_child_fert.drop(columns=['mortality_pct', 'employ_group'])
+employ_child_fert = employ_child_fert.drop(columns=['mortality_pct', 'employ_group','Country Code'])
+
+# Column descriptions
+column_descriptions = """
+- Country/area: The name of the country or area.
+- Country Code: The ISO code for the country.
+- Continent: The continent where the country is located.
+- Year: The year of observation.
+- Child Mortality: Number of deaths under age 5 per 1000 live births.
+- Fertility Rate: Number of children a woman would have in her lifetime based on current age-specific fertility rates.
+- Employment Rate: Percentage of females aged 15+ employed.
+"""
+
+# print(column_descriptions)
+
 # Display full dataset with itables
 show(
     employ_child_fert,
@@ -592,7 +577,11 @@ Child mortality is for 0 to 5 year olds dying per 1000 born.
 Total fertility rate is the number of children that would be born to a woman if she were to live to the end of her childbearing years and bear children in accordance with age-specific fertility rates of the specified year.
 Female employment rate is the percentage of female population, age group 15+, that has been employed during the given year.
 
-Gapminder is an independent Swedish foundation with no political, religious or economic affiliations. Gapminder fights devastating misconceptions and promotes a fact-based worldview everyone can understand.
+Home page shows an overview of the analysis:
+The **bar** plot shows that most of the countries with the female employment rate of 58% to 90% have the highest average of child mortality, followed by the lowest employment group. This might be due to most developing countries in Africa and some in Asia.
+The **scatter** plot shows that most African countries had high child mortality and woman's fertility in 1991 with few Asian countries. In 2019, child mortality has reduced by half from about 30% in 1991 yet the number of babies per woman are still above 3 for most African countries.
+
+The Gapminder Foundation is a non-profit venture that promotes sustainable global development and achievement of the United Nations Millennium Development Goals by increasing use and understanding of statistics and other information about social, economic, and environmental development.
 
 **Watch Hans Rosling on Child Mortality in Developing Countries:**
 
