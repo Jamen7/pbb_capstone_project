@@ -1,6 +1,8 @@
 ---
 title: "Analyzing Global Trends in Child Mortality, Fertility, and Employment"
 format: html
+execute:
+    echo: false
 author: "James Matosse"
 ---
 
@@ -222,7 +224,7 @@ fig_bar = px.bar(
     x="continent",
     y="mortality",
     color="continent",
-    hover_name="country"
+    hover_name="country",
     title="Lowest Child Mortality per Continent (2019)",
     labels={
         "mortality": "Child Mortality",
@@ -231,6 +233,8 @@ fig_bar = px.bar(
     },
     color_discrete_map=continent_color,
     text_auto=".1f",
+).update_layout(
+    showlegend=False,
 )
 fig_bar.show()
 ```

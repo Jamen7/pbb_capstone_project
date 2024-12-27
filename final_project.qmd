@@ -21,6 +21,7 @@ import country_converter as coco
 from IPython.display import Markdown
 
 import warnings
+
 # Suppress warnings for cleaner output
 warnings.filterwarnings("ignore")
 
@@ -31,9 +32,11 @@ child_mortality = pd.read_csv(
 fertility_wide = pd.read_csv("data/children_per_woman_total_fertility.csv")
 employ_wide = pd.read_csv("data/females_aged_15plus_employment_rate_percent.csv")
 
+
 ## data cleaning
 def melt_data(df, value_name):
     return df.melt(id_vars="country", var_name="year", value_name=value_name)
+
 
 child_mortality_long = melt_data(child_mortality, "mortality")
 fertility_long = melt_data(fertility_wide, "woman_fertility")
@@ -56,9 +59,7 @@ filtered_child_fertility = child_fertility.query("1991 <= year <= 2019")
 filtered_child_fertility["country_code"] = coco.convert(
     names=filtered_child_fertility["country"], to="ISO3"
 )
-employ_long["country_code"] = coco.convert(
-    names=employ_long["country"], to="ISO3"
-)
+employ_long["country_code"] = coco.convert(names=employ_long["country"], to="ISO3")
 
 # Merge datasets on 'country_code' and 'year'
 employ_child_fert = pd.merge(
@@ -138,7 +139,7 @@ fig_bar = px.bar(
     x="continent",
     y="mortality",
     color="continent",
-    hover_name="country"
+    hover_name="country",
     title="Lowest Child Mortality per Continent (2019)",
     labels={
         "mortality": "Child Mortality",
@@ -147,6 +148,8 @@ fig_bar = px.bar(
     },
     color_discrete_map=continent_color,
     text_auto=".1f",
+).update_layout(
+    showlegend=False,
 )
 
 # Animated map of child mortality
@@ -426,7 +429,7 @@ Markdown(table_df.to_markdown())
 #### Map
 
 ```{python}
-map_fig.show()
+map_fig
 ```
 
 #### Chart
