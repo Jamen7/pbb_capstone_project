@@ -221,13 +221,15 @@ fig_bar = px.bar(
     lowest_mortality,
     x="continent",
     y="mortality",
-    color="country",
+    color="continent",
+    hover_name="country"
     title="Lowest Child Mortality per Continent (2019)",
     labels={
         "mortality": "Child Mortality",
         "continent": "Continent",
         "country": "Country",
     },
+    color_discrete_map=continent_color,
     text_auto=".1f",
 )
 fig_bar.show()
